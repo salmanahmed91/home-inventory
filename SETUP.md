@@ -12,7 +12,8 @@ Data is kept in that browser only, so this is for trying it out.
 - **Shopping tab**: tick an item when you buy it and its stock goes up automatically. You can also type in extra things to buy.
 - **Use soon tab**: things expiring in the next 7 days, plus things likely to run out within 7 days.
 - **Runs out in X days**: the app learns from your **−** presses. After a few presses it shows e.g. "2 L/week · ~4 days left".
-- **▦ Scan**: scans a barcode with the camera. A known item opens with quick −1/+1 buttons. A new one opens the "Add item" form with the product name filled in where it can find it (from the free Open Food Facts database, mostly food and drink). You can also type the barcode number.
+- **▦ Scan**: scans a barcode with the camera, or from a photo you take (often more reliable on laptops). A known item opens with quick −1/+1 buttons. For a new one, the app searches free product databases (Open Food/Beauty/Products/Pet Food Facts), shows you the match with its picture and asks you to confirm, then fills in the name, size and picture. If the barcode isn't listed, search by the name on the pack and tap the right product.
+- **Pictures**: every item can have a picture, shown next to it in your list and on the shopping list. Use **Find product & picture** when editing an item, or take your own photo.
 - **Settings › Backup**: download everything as a backup file or as a spreadsheet (CSV, opens in Excel).
 
 ## 3. Saving to OneDrive (one-time setup, about 10 minutes)

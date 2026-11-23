@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src https://login.microsoftonline.com https://graph.microsoft.com https://*.microsoftpersonalcontent.com https://*.1drv.com https://*.sharepoint.com https://world.openfoodfacts.org; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: mediastream:; connect-src https://login.microsoftonline.com https://graph.microsoft.com https://*.microsoftpersonalcontent.com https://*.1drv.com https://*.sharepoint.com https://world.openfoodfacts.org https://world.openbeautyfacts.org https://world.openproductsfacts.org https://world.openpetfoodfacts.org; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#2f6f4f">
 <title>Home Inventory</title>
@@ -74,6 +74,9 @@ label input,label select,label textarea{display:block;width:100%;margin-top:3px;
 video{width:100%;border-radius:12px;background:#000;max-height:50vh;object-fit:cover}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:14px;z-index:20;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
 .toast.show{opacity:1}
+
+.thumb{border-radius:8px;object-fit:contain;background:#fff;flex:none;border:1px solid var(--line);display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
+.pick{cursor:pointer}.pick:hover{background:var(--chip)}
 code{background:var(--chip);padding:1px 5px;border-radius:4px;font-size:13px;word-break:break-all}
 </style>
 </head>

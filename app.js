@@ -114,6 +114,7 @@ function uniq(arr) { return [...new Set(arr.filter(Boolean).map(s => s.trim()).f
 function itemRow(it) {
   const u = usage(it);
   return `<div class="row">
+    ${thumb(it.image)}
     <div class="main" data-edit="${esc(it.id)}">
       <div class="name">${esc(it.name)}</div>
       <div class="sub">
@@ -162,6 +163,7 @@ function renderShop() {
     const it = s.itemId && itemById(s.itemId);
     return `<div class="row ${s.done ? 'done' : ''}">
       <input type="checkbox" class="check" data-tick="${esc(s.id)}" ${s.done ? 'checked' : ''} aria-label="Bought">
+      ${thumb((it && it.image) || s.image)}
       <div class="main" data-shopedit="${esc(s.id)}">
         <div class="name">${esc(s.name)}</div>
         <div class="sub"><span>Buy ${fmt(num(s.qty))} ${esc(s.unit || '')}</span>
@@ -251,13 +253,23 @@ function closeDialog() { scanner.stop(); if (dlg.open) dlg.close(); }
 dlg.addEventListener('close', () => scanner.stop());
 dlg.addEventListener('click', e => { if (e.target === dlg) closeDialog(); });
 
-function itemForm(it, isNew) {
+function itemForm(it, isNew, target) {
+  if (!isNew) target = target || it;
+  let image = safeImg(it.image) ? it.image : '';
   const all = liveItems();
   const dl = (id, vals) => `<datalist id="${id}">${vals.map(v => `<option value="${esc(v)}">`).join('')}</datalist>`;
   const u = !isNew && usage(it);
   openDialog(`<h3>${isNew ? 'Add item' : 'Edit item'}</h3>
   <form id="itemForm" class="grid">
     <label class="full">Name<input name="name" required value="${esc(it.name)}" autocomplete="off"></label>
+    <div class="full inline" style="flex-wrap:nowrap">
+      <span id="picBox">${thumb(image, 64)}</span>
+      <div class="inline">
+        <button type="button" class="btn" id="picFind">🔍 Find product &amp; picture</button>
+        <label class="btn" style="color:inherit;font-size:inherit">📷 Own photo<input type="file" accept="image/*" id="picFile" hidden></label>
+        <button type="button" class="btn" id="picDel" ${image ? '' : 'hidden'}>Remove picture</button>
+      </div>
+    </div>
     <label>Category<input name="category" list="dlCat" value="${esc(it.category)}" placeholder="e.g. Pantry"></label>
     <label>Place<input name="location" list="dlLoc" value="${esc(it.location)}" placeholder="e.g. Kitchen cupboard"></label>
     <label>Quantity<input name="qty" type="number" step="any" min="0" inputmode="decimal" value="${fmt(num(it.qty))}"></label>
@@ -278,29 +290,42 @@ function itemForm(it, isNew) {
     <button class="btn primary" id="saveItem">Save</button>
   </div>`);
   $('#cancel').onclick = closeDialog;
+  const draft = () => ({ ...it, ...Object.fromEntries(new FormData($('#itemForm'))), image });
+  const showPic = () => { $('#picBox').innerHTML = thumb(image, 64); $('#picDel').hidden = !image; };
+  $('#picDel').onclick = () => { image = ''; showPic(); };
+  $('#picFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { image = await resizeImage(f, 160); showPic(); } catch (err) { toast(err.message); }
+  };
+  $('#picFind').onclick = () => {
+    const d = draft();
+    productSearch({ query: d.name, code: d.barcode, skipLabel: 'Back', msg: 'Search for the exact product, then tap it to use its name and picture.',
+      onPick: p => confirmProduct(p, () => itemForm(applyProduct({ ...d, name: '' }, p), isNew, target), () => itemForm(d, isNew, target)),
+      onCancel: () => itemForm(d, isNew, target) });
+  };
   if (!isNew) $('#delItem').onclick = () => {
-    if (!confirm(`Delete "${it.name}"?`)) return;
-    it.deleted = true; it.updatedAt = now(); syncShoppingFor(it); closeDialog(); save(); toast('Deleted');
+    if (!confirm(`Delete "${target.name}"?`)) return;
+    target.deleted = true; target.updatedAt = now(); syncShoppingFor(target); closeDialog(); save(); toast('Deleted');
   };
   const submit = () => {
     const f = $('#itemForm'); if (!f.reportValidity()) return;
     const v = Object.fromEntries(new FormData(f));
     const newQty = num(v.qty);
-    const target = isNew ? { id: uid() } : it;
-    const oldQty = isNew ? 0 : num(it.qty);
-    Object.assign(target, {
+    const obj = isNew ? { id: uid() } : target;
+    const oldQty = isNew ? 0 : num(target.qty);
+    Object.assign(obj, {
       name: v.name.trim(), category: v.category.trim(), location: v.location.trim(),
       qty: newQty, unit: v.unit.trim(), minQty: num(v.minQty), buyQty: num(v.buyQty),
-      expiry: v.expiry || '', barcode: v.barcode.trim(), notes: v.notes.trim(), updatedAt: now(),
+      expiry: v.expiry || '', barcode: v.barcode.trim(), notes: v.notes.trim(), image, updatedAt: now(),
     });
-    if (isNew) data.items.push(target);
-    else if (newQty !== oldQty) data.log.push({ id: uid(), itemId: target.id, t: now(), delta: newQty - oldQty, kind: 'set' });
-    syncShoppingFor(target);
+    if (isNew) data.items.push(obj);
+    else if (newQty !== oldQty) data.log.push({ id: uid(), itemId: obj.id, t: now(), delta: newQty - oldQty, kind: 'set' });
+    syncShoppingFor(obj);
     closeDialog(); save(); toast(isNew ? 'Added' : 'Saved');
   };
   $('#saveItem').onclick = submit;
   $('#itemForm').onsubmit = e => { e.preventDefault(); submit(); };
-  if (isNew && !it.name) setTimeout(() => $('#itemForm [name=name]').focus(), 50);
+  if (isNew && !it.name) setTimeout(() => $('#itemForm [name=name]')?.focus(), 50);
 }
 
 function shopForm(s) {
@@ -334,11 +359,101 @@ function tickShop(id, checked) {
   save();
 }
 
+/* ---------------- product pictures ---------------- */
+function safeImg(src) { return typeof src === 'string' && (/^https:\/\/[^\s"'<>]+$/.test(src) || /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(src)); }
+function thumb(src, size) { return safeImg(src) ? `<img class="thumb" src="${esc(src)}" alt="" loading="lazy" style="width:${size || 40}px;height:${size || 40}px">` : ''; }
+function resizeImage(file, max) {
+  return new Promise((ok, bad) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, (max || 160) / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); bad(new Error('Could not read that picture')); };
+    img.src = url;
+  });
+}
+
+/* ---------------- product lookup (free Open Facts databases) ---------------- */
+const PRODUCT_DBS = ['world.openfoodfacts.org', 'world.openbeautyfacts.org', 'world.openproductsfacts.org', 'world.openpetfoodfacts.org'];
+const PRODUCT_FIELDS = 'code,product_name,generic_name,brands,quantity,categories,image_front_small_url,image_small_url';
+async function getJSON(url, ms) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms || 7000);
+  try { const r = await fetch(url, { signal: ctl.signal }); return r.ok ? await r.json() : null; } catch { return null; } finally { clearTimeout(t); }
+}
+function toProduct(p) {
+  const brand = String(p.brands || '').split(',')[0].trim();
+  const pname = String(p.product_name || p.generic_name || '').trim();
+  if (!pname && !brand) return null;
+  const name = pname && brand && !pname.toLowerCase().includes(brand.toLowerCase()) ? `${brand} ${pname}` : (pname || brand);
+  return { code: String(p.code || ''), name, brand, size: String(p.quantity || '').trim(),
+    category: String(p.categories || '').split(',')[0].trim().replace(/^[a-z]{2}:/, ''),
+    image: [p.image_front_small_url, p.image_small_url].find(safeImg) || '' };
+}
+async function lookupBarcode(code) {
+  const res = await Promise.all(PRODUCT_DBS.map(h => getJSON(`https://${h}/api/v2/product/${encodeURIComponent(code)}.json?fields=${PRODUCT_FIELDS}`)));
+  for (const j of res) if (j && j.product) { const p = toProduct({ ...j.product, code }); if (p) return p; }
+  return null;
+}
+async function searchProducts(q) {
+  const res = await Promise.all(PRODUCT_DBS.map(h => getJSON(`https://${h}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=8&fields=${PRODUCT_FIELDS}`, 12000)));
+  const out = []; const seen = new Set();
+  res.forEach(j => (j && j.products || []).forEach(p => { const x = toProduct(p); if (x && !seen.has(x.code + x.name)) { seen.add(x.code + x.name); out.push(x); } }));
+  return out.sort((a, b) => (b.image ? 1 : 0) - (a.image ? 1 : 0)).slice(0, 20);
+}
+// Merge a found product into a draft item (keeps anything the user already typed)
+function applyProduct(draft, p) {
+  const notes = p.size && !(draft.notes || '').includes(p.size) ? [draft.notes, 'Size: ' + p.size].filter(Boolean).join('\n') : draft.notes;
+  return { ...draft, name: p.name || draft.name, category: draft.category || p.category, image: p.image || draft.image, barcode: draft.barcode || p.code, notes };
+}
+function productCard(p, size) {
+  return `<div class="inline" style="flex-wrap:nowrap;align-items:flex-start">${thumb(p.image, size || 72) || `<span class="thumb noimg" style="width:${size || 72}px;height:${size || 72}px">?</span>`}
+    <div style="min-width:0"><b>${esc(p.name)}</b><div class="muted">${esc([p.brand, p.size].filter(Boolean).join(' · '))}</div>
+    ${p.code ? `<div class="muted" style="font-size:12px">Barcode ${esc(p.code)}</div>` : ''}</div></div>`;
+}
+function confirmProduct(p, onYes, onNo) {
+  openDialog(`<h3>Is this your product?</h3>${productCard(p, 96)}
+    <div class="actions"><button class="btn left" id="pcNo">No, search again</button><button class="btn primary" id="pcYes">Yes, fill in the details</button></div>`);
+  $('#pcYes').onclick = onYes; $('#pcNo').onclick = onNo;
+}
+// Search by name; tapping a result picks it
+function productSearch(o) {
+  openDialog(`<h3>Find the product</h3>
+    ${o.msg ? `<p class="muted">${esc(o.msg)}</p>` : ''}
+    <div class="inline"><input class="search" style="margin:0;flex:1" id="psQ" value="${esc(o.query || '')}" placeholder="e.g. Dettol hand wash"><button class="btn primary" id="psGo">Search</button></div>
+    <div id="psRes" style="margin-top:10px"></div>
+    ${o.code ? `<p class="muted">Can't find it? <a href="https://www.google.com/search?q=${encodeURIComponent(o.code)}" target="_blank" rel="noopener noreferrer">Look up ${esc(o.code)} on the web</a>, then search by its name here.</p>` : ''}
+    <div class="actions"><button class="btn" id="psSkip">${esc(o.skipLabel || 'Type it in myself')}</button></div>`);
+  $('#psSkip').onclick = o.onCancel;
+  let results = [];
+  const go = async () => {
+    const q = $('#psQ').value.trim(); if (!q) return;
+    $('#psRes').innerHTML = '<p class="muted">Searching…</p>';
+    results = await searchProducts(q);
+    if (!$('#psRes')) return;
+    $('#psRes').innerHTML = results.length
+      ? `<div class="list">${results.map((p, i) => `<div class="row pick" data-pick="${i}">${productCard(p, 48)}</div>`).join('')}</div><p class="muted">Tap the right one.</p>`
+      : '<p class="muted">Nothing found. Try fewer or different words.</p>';
+  };
+  $('#psGo').onclick = go;
+  $('#psQ').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+  $('#psRes').onclick = e => { const r = e.target.closest('[data-pick]'); if (r) o.onPick(results[+r.dataset.pick]); };
+  if (o.query) go(); else setTimeout(() => $('#psQ')?.focus(), 50);
+}
+
 /* ---------------- barcode scanning ---------------- */
+function zxHints() {
+  const h = new Map(), F = ZXing.BarcodeFormat;
+  h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.QR_CODE]);
+  h.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  return h;
+}
+const CAMERA = { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } };
 const scanner = {
-  stream: null, reader: null, timer: null,
+  stream: null, reader: null, timer: null, hintTimer: null,
   stop() {
-    clearInterval(this.timer); this.timer = null;
+    clearInterval(this.timer); this.timer = null; clearTimeout(this.hintTimer);
     if (this.reader) { try { this.reader.reset(); } catch {} this.reader = null; }
     if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
   },
@@ -346,22 +461,34 @@ const scanner = {
     try {
       if ('BarcodeDetector' in window) {
         const det = new BarcodeDetector();
-        this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        this.stream = await navigator.mediaDevices.getUserMedia(CAMERA);
         video.srcObject = this.stream; await video.play();
         this.timer = setInterval(async () => {
           try { const r = await det.detect(video); if (r.length) { this.stop(); onCode(r[0].rawValue); } } catch {}
-        }, 250);
+        }, 200);
       } else {
-        // Safari/iPhone and Firefox: load a scanner library on demand
+        // Windows, iPhone and Firefox: use the bundled scanner library
         if (!window.ZXing) await loadScript('vendor/zxing-0.21.3.min.js');
-        this.reader = new ZXing.BrowserMultiFormatReader();
-        await this.reader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video, (res) => {
+        this.reader = new ZXing.BrowserMultiFormatReader(zxHints(), 150);
+        await this.reader.decodeFromConstraints(CAMERA, video, (res) => {
           if (res) { const code = res.getText(); this.stop(); onCode(code); }
         });
       }
     } catch (e) { this.stop(); onError(e); }
   },
 };
+async function decodeImageFile(file) {
+  try {
+    if ('BarcodeDetector' in window) {
+      const r = await new BarcodeDetector().detect(await createImageBitmap(file));
+      if (r.length) return r[0].rawValue;
+    }
+    if (!window.ZXing) await loadScript('vendor/zxing-0.21.3.min.js');
+    const url = URL.createObjectURL(file);
+    try { return (await new ZXing.BrowserMultiFormatReader(zxHints()).decodeFromImageUrl(url)).getText(); }
+    finally { URL.revokeObjectURL(url); }
+  } catch { return null; }
+}
 function loadScript(src) {
   return new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error('Could not load the scanner')); document.head.appendChild(s); });
 }
@@ -369,40 +496,46 @@ function loadScript(src) {
 function openScanner() {
   openDialog(`<h3>Scan a barcode</h3>
     <video id="scanVideo" playsinline muted></video>
-    <p class="muted" id="scanMsg">Point your camera at the barcode.</p>
-    <div class="inline"><input class="search" style="margin:0;flex:1" id="manualCode" inputmode="numeric" placeholder="…or type the number">
+    <p class="muted" id="scanMsg">Starting camera…</p>
+    <div class="inline">
+      <label class="btn" style="color:inherit;font-size:inherit">📷 Take a photo of it<input type="file" accept="image/*" capture="environment" id="scanPhoto" hidden></label>
+    </div>
+    <div class="inline" style="margin-top:8px"><input class="search" style="margin:0;flex:1" id="manualCode" inputmode="numeric" placeholder="…or type the number">
     <button class="btn" id="manualGo">Go</button></div>
     <div class="actions"><button class="btn" id="cancel">Close</button></div>`);
+  const got = code => { try { navigator.vibrate?.(80); } catch {} handleCode(code); };
   $('#cancel').onclick = closeDialog;
   $('#manualGo').onclick = () => { const c = $('#manualCode').value.trim(); if (c) handleCode(c); };
-  if (!navigator.mediaDevices?.getUserMedia) { $('#scanMsg').textContent = 'Camera not available here. Type the number instead.'; return; }
-  scanner.start($('#scanVideo'), handleCode, e => { $('#scanMsg').textContent = 'Camera could not start (' + (e.message || e.name) + '). Type the number instead.'; });
+  $('#manualCode').onkeydown = e => { if (e.key === 'Enter') $('#manualGo').click(); };
+  $('#scanPhoto').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    $('#scanMsg').textContent = 'Reading the photo…';
+    const code = await decodeImageFile(f);
+    if (code) got(code); else $('#scanMsg').textContent = "Couldn't read a barcode in that photo. Get closer so the barcode fills the picture, or type the number.";
+  };
+  if (!navigator.mediaDevices?.getUserMedia) { $('#scanMsg').textContent = 'Live camera not available here. Take a photo or type the number.'; return; }
+  scanner.start($('#scanVideo'), got, e => { $('#scanMsg').textContent = 'Camera could not start (' + (e.message || e.name) + '). Take a photo or type the number instead.'; });
+  setTimeout(() => { const m = $('#scanMsg'); if (m && m.textContent.startsWith('Starting')) m.textContent = 'Hold the barcode flat and steady, about a hand away from the camera.'; }, 1500);
+  scanner.hintTimer = setTimeout(() => { const m = $('#scanMsg'); if (m && (scanner.reader || scanner.timer)) m.textContent = 'Still looking… Try more light, move a little further away, or use "Take a photo".'; }, 12000);
 }
 
 async function handleCode(code) {
   scanner.stop();
+  code = String(code).trim();
   const found = liveItems().find(i => i.barcode && i.barcode === code);
   if (found) { quickItem(found); return; }
-  openDialog(`<h3>New barcode</h3><p class="muted">Looking up ${esc(code)}…</p>`);
-  let name = '', category = '';
-  try {
-    const ctl = new AbortController(); setTimeout(() => ctl.abort(), 5000);
-    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,brands,generic_name,categories`, { signal: ctl.signal });
-    if (r.ok) {
-      const j = await r.json();
-      if (j.product) {
-        name = [j.product.brands?.split(',')[0], j.product.product_name || j.product.generic_name].filter(Boolean).join(' ').trim();
-        category = (j.product.categories || '').split(',')[0]?.trim() || '';
-      }
-    }
-  } catch {}
-  itemForm({ name, category, location: '', qty: 1, unit: 'pcs', minQty: 0, barcode: code }, true);
-  if (!name) toast("Product not found online. Type its name.");
+  openDialog(`<h3>Barcode ${esc(code)}</h3><p class="muted">Searching product databases…</p>`);
+  const base = { name: '', category: ui.cat, location: ui.loc, qty: 1, unit: 'pcs', minQty: 0, barcode: code };
+  const toForm = p => itemForm(p ? applyProduct(base, p) : base, true);
+  const search = msg => productSearch({ msg, code, onPick: p => toForm(p), onCancel: () => toForm(null) });
+  const p = await lookupBarcode(code);
+  if (p) confirmProduct(p, () => toForm(p), () => search('Search by name and tap the right product.'));
+  else search(`Barcode ${code} isn't in the free product databases yet. Search by the name on the pack, or type the details yourself.`);
 }
 
 // After a scan of a known item: quick −/+ without hunting for it
 function quickItem(it) {
-  const draw = () => openDialog(`<h3>${esc(it.name)}</h3>
+  const draw = () => openDialog(`<h3>${esc(it.name)}</h3>${thumb(it.image, 96)}
     <p class="muted">${esc([it.location, it.category].filter(Boolean).join(' · '))}</p>
     <div class="inline" style="justify-content:center;gap:16px;margin:16px 0">
       <button class="btn" style="font-size:22px;width:64px" id="qMinus">−1</button>
