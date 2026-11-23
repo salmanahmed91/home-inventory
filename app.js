@@ -105,7 +105,8 @@ function expiryTag(it) {
 }
 
 /* ---------------- settings ---------------- */
-const settings = Object.assign({ soonDays: 7, runOutDays: 7, clientId: '', amazonSite: 'amazon.com' }, store.get('inv.settings', {}));
+const settings = Object.assign({ soonDays: 7, runOutDays: 7, clientId: '', amazonSite: 'amazon.co.jp' }, store.get('inv.settings', {}));
+if (!settings.amazonPicked) settings.amazonSite = 'amazon.co.jp';   // default store unless the user picked one
 function saveSettings() { store.set('inv.settings', settings); }
 
 /* ---------------- rendering ---------------- */
@@ -215,7 +216,7 @@ function renderSettings() {
     <div class="grid">
       <label>"Use soon" if expiring within (days)<input type="number" min="0" id="soonDays" value="${settings.soonDays}"></label>
       <label>"Running out" if within (days)<input type="number" min="0" id="runOutDays" value="${settings.runOutDays}"></label>
-      <label class="full">Amazon store for product look-ups<select id="amazonSite">${["amazon.com", "amazon.co.uk", "amazon.ae", "amazon.sa", "amazon.in", "amazon.sg", "amazon.com.au", "amazon.ca", "amazon.de"].map(x => `<option ${x === settings.amazonSite ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+      <label class="full">Amazon store for product look-ups<select id="amazonSite">${["amazon.co.jp", "amazon.com", "amazon.co.uk", "amazon.ae", "amazon.sa", "amazon.in", "amazon.sg", "amazon.com.au", "amazon.ca", "amazon.de"].map(x => `<option ${x === settings.amazonSite ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
     </div>
   </div>
   <div class="card">
@@ -731,7 +732,7 @@ document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'soonDays') { settings.soonDays = Math.max(0, num(t.value)); saveSettings(); render(); }
   if (t.id === 'runOutDays') { settings.runOutDays = Math.max(0, num(t.value)); saveSettings(); render(); }
-  if (t.id === 'amazonSite') { settings.amazonSite = t.value; saveSettings(); }
+  if (t.id === 'amazonSite') { settings.amazonSite = t.value; settings.amazonPicked = true; saveSettings(); }
   if (t.id === 'clientId') { settings.clientId = t.value.trim(); saveSettings(); }
   if (t.id === 'importFile' && t.files[0]) {
     t.files[0].text().then(txt => {
