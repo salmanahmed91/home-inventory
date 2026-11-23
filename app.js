@@ -519,10 +519,10 @@ function openScanner() {
     const f = e.target.files[0]; if (!f) return;
     $('#scanMsg').textContent = 'Reading the photo…';
     const code = await decodeImageFile(f);
-    if (code) got(code); else $('#scanMsg').textContent = "Couldn't read a barcode in that photo. Get closer so the barcode fills the picture, or type the number.";
+    if (code) got(code); else if ($('#scanMsg')) $('#scanMsg').textContent = "Couldn't read a barcode in that photo. Get closer so the barcode fills the picture, or type the number.";
   };
   if (!navigator.mediaDevices?.getUserMedia) { $('#scanMsg').textContent = 'Live camera not available here. Take a photo or type the number.'; return; }
-  scanner.start($('#scanVideo'), got, e => { $('#scanMsg').textContent = 'Camera could not start (' + (e.message || e.name) + '). Take a photo or type the number instead.'; });
+  scanner.start($('#scanVideo'), got, e => { const m = $('#scanMsg'); if (m) m.textContent = 'Camera could not start (' + (e.message || e.name) + '). Take a photo or type the number instead.'; });
   setTimeout(() => { const m = $('#scanMsg'); if (m && m.textContent.startsWith('Starting')) m.textContent = 'Hold the barcode flat and steady, about a hand away from the camera.'; }, 1500);
   scanner.hintTimer = setTimeout(() => { const m = $('#scanMsg'); if (m && (scanner.reader || scanner.timer)) m.textContent = 'Still looking… Try more light, move a little further away, or use "Take a photo".'; }, 12000);
 }
