@@ -105,7 +105,7 @@ function expiryTag(it) {
 }
 
 /* ---------------- settings ---------------- */
-const settings = Object.assign({ soonDays: 7, runOutDays: 7, clientId: '' }, store.get('inv.settings', {}));
+const settings = Object.assign({ soonDays: 7, runOutDays: 7, clientId: '', amazonSite: 'amazon.com' }, store.get('inv.settings', {}));
 function saveSettings() { store.set('inv.settings', settings); }
 
 /* ---------------- rendering ---------------- */
@@ -215,6 +215,7 @@ function renderSettings() {
     <div class="grid">
       <label>"Use soon" if expiring within (days)<input type="number" min="0" id="soonDays" value="${settings.soonDays}"></label>
       <label>"Running out" if within (days)<input type="number" min="0" id="runOutDays" value="${settings.runOutDays}"></label>
+      <label class="full">Amazon store for product look-ups<select id="amazonSite">${["amazon.com", "amazon.co.uk", "amazon.ae", "amazon.sa", "amazon.in", "amazon.sg", "amazon.com.au", "amazon.ca", "amazon.de"].map(x => `<option ${x === settings.amazonSite ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
     </div>
   </div>
   <div class="card">
@@ -268,6 +269,7 @@ function itemForm(it, isNew, target) {
         <button type="button" class="btn" id="picFind">🔍 Find product &amp; picture</button>
         <label class="btn" style="color:inherit;font-size:inherit">📷 Own photo<input type="file" accept="image/*" id="picFile" hidden></label>
         <button type="button" class="btn" id="picDel" ${image ? '' : 'hidden'}>Remove picture</button>
+        ${it.name || it.barcode ? `<a class="btn" style="text-decoration:none;color:inherit" href="https://www.${esc(settings.amazonSite)}/s?k=${encodeURIComponent(it.barcode || it.name)}" target="_blank" rel="noopener noreferrer">Amazon ↗</a>` : ''}
       </div>
     </div>
     <label>Category<input name="category" list="dlCat" value="${esc(it.category)}" placeholder="e.g. Pantry"></label>
@@ -423,9 +425,14 @@ function productSearch(o) {
     ${o.msg ? `<p class="muted">${esc(o.msg)}</p>` : ''}
     <div class="inline"><input class="search" style="margin:0;flex:1" id="psQ" value="${esc(o.query || '')}" placeholder="e.g. Dettol hand wash"><button class="btn primary" id="psGo">Search</button></div>
     <div id="psRes" style="margin-top:10px"></div>
-    ${o.code ? `<p class="muted">Can't find it? <a href="https://www.google.com/search?q=${encodeURIComponent(o.code)}" target="_blank" rel="noopener noreferrer">Look up ${esc(o.code)} on the web</a>, then search by its name here.</p>` : ''}
+    <p class="muted" id="psWeb"></p>
     <div class="actions"><button class="btn" id="psSkip">${esc(o.skipLabel || 'Type it in myself')}</button></div>`);
   $('#psSkip').onclick = o.onCancel;
+  const web = () => {
+    const q = $('#psQ').value.trim() || o.code || '';
+    $('#psWeb').innerHTML = q ? `Can't find it? Look it up on <a href="https://www.${esc(settings.amazonSite)}/s?k=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">Amazon</a> or <a href="https://www.google.com/search?q=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">Google</a>, then type its name here.` : '';
+  };
+  web(); $('#psQ').addEventListener('input', web);
   let results = [];
   const go = async () => {
     const q = $('#psQ').value.trim(); if (!q) return;
@@ -724,6 +731,7 @@ document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'soonDays') { settings.soonDays = Math.max(0, num(t.value)); saveSettings(); render(); }
   if (t.id === 'runOutDays') { settings.runOutDays = Math.max(0, num(t.value)); saveSettings(); render(); }
+  if (t.id === 'amazonSite') { settings.amazonSite = t.value; saveSettings(); }
   if (t.id === 'clientId') { settings.clientId = t.value.trim(); saveSettings(); }
   if (t.id === 'importFile' && t.files[0]) {
     t.files[0].text().then(txt => {
